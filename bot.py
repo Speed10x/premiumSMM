@@ -19,12 +19,14 @@ LOLSMM_API_URL = os.getenv('LOLSMM_API_URL')
 LOLSMM_API_KEY = os.getenv('LOLSMM_API_KEY')
 LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+SUPPORT_USERNAME = os.getenv('SUPPORT_USERNAME')
+PROOFS_CHANNEL = os.getenv('PROOFS_CHANNEL')
 
 # Flask app for webhook
 app = Flask(__name__)
 
 # Conversation states
-PLATFORM, SERVICE, QUANTITY, ACCOUNT, PAYMENT = range(5)
+MAIN_MENU, PLATFORM, SERVICE, QUANTITY, ACCOUNT, PAYMENT = range(6)
 
 # Platform and service options
 PLATFORMS = {
@@ -60,33 +62,74 @@ PRICE_CHART = {
 # User session storage
 user_sessions = {}
 
+def get_main_menu_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("Start Order", callback_data='start_order')],
+        [InlineKeyboardButton("Support", url=f"https://t.me/{SUPPORT_USERNAME}"),
+         InlineKeyboardButton("Proofs", url=PROOFS_CHANNEL)]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send a message when the command /start is issued."""
-    keyboard = [[InlineKeyboardButton(platform, callback_data=f'platform_{platform}')] for platform in PLATFORMS.keys()]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Welcome! Please choose a platform:', reply_markup=reply_markup)
-    return PLATFORM
+    await update.message.reply_text('Welcome to our SMM services!', reply_markup=get_main_menu_keyboard())
+    return MAIN_MENU
+
+async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle main menu selection."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == 'start_order':
+        keyboard = [[InlineKeyboardButton(platform, callback_data=f'platform_{platform}')] for platform in PLATFORMS.keys()]
+        keyboard.append([InlineKeyboardButton("Back", callback_data='back_to_main')])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text('Please choose a platform:', reply_markup=reply_markup)
+        return PLATFORM
+    elif query.data == 'back_to_main':
+        await query.edit_message_text('Welcome to our SMM services!', reply_markup=get_main_menu_keyboard())
+        return MAIN_MENU
 
 async def platform_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle platform selection."""
     query = update.callback_query
     await query.answer()
-    platform = query.data.split('_')[1]
-    user_sessions[query.from_user.id] = {'platform': platform}
     
-    keyboard = [[InlineKeyboardButton(service, callback_data=f'service_{service}')] for service in PLATFORMS[platform]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(f'You selected {platform}. Now choose a service:', reply_markup=reply_markup)
-    return SERVICE
+    if query.data.startswith('platform_'):
+        platform = query.data.split('_')[1]
+        user_sessions[query.from_user.id] = {'platform': platform}
+        
+        keyboard = [[InlineKeyboardButton(service, callback_data=f'service_{service}')] for service in PLATFORMS[platform]]
+        keyboard.append([InlineKeyboardButton("Back", callback_data='back_to_platforms')])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f'You selected {platform}. Now choose a service:', reply_markup=reply_markup)
+        return SERVICE
+    elif query.data == 'back_to_platforms':
+        keyboard = [[InlineKeyboardButton(platform, callback_data=f'platform_{platform}')] for platform in PLATFORMS.keys()]
+        keyboard.append([InlineKeyboardButton("Back", callback_data='back_to_main')])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text('Please choose a platform:', reply_markup=reply_markup)
+        return PLATFORM
 
 async def service_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle service selection."""
     query = update.callback_query
     await query.answer()
-    service = query.data.split('_')[1]
-    user_sessions[query.from_user.id]['service'] = service
-    await query.edit_message_text(f'You selected {service}. Please enter the quantity (50-20,000):')
-    return QUANTITY
+    
+    if query.data.startswith('service_'):
+        service = query.data.split('_')[1]
+        user_sessions[query.from_user.id]['service'] = service
+        keyboard = [[InlineKeyboardButton("Back", callback_data='back_to_services')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f'You selected {service}. Please enter the quantity (50-20,000):', reply_markup=reply_markup)
+        return QUANTITY
+    elif query.data == 'back_to_services':
+        platform = user_sessions[query.from_user.id]['platform']
+        keyboard = [[InlineKeyboardButton(service, callback_data=f'service_{service}')] for service in PLATFORMS[platform]]
+        keyboard.append([InlineKeyboardButton("Back", callback_data='back_to_platforms')])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f'You selected {platform}. Now choose a service:', reply_markup=reply_markup)
+        return SERVICE
 
 async def quantity_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle quantity input."""
@@ -94,7 +137,9 @@ async def quantity_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         quantity = int(update.message.text)
         if 50 <= quantity <= 20000:
             user_sessions[update.effective_user.id]['quantity'] = quantity
-            await update.message.reply_text('Great! Now please enter the username, ID, or share the link of the account:')
+            keyboard = [[InlineKeyboardButton("Back", callback_data='back_to_quantity')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text('Great! Now please enter the username, ID, or share the link of the account:', reply_markup=reply_markup)
             return ACCOUNT
         else:
             await update.message.reply_text('Please enter a quantity between 50 and 20,000.')
@@ -123,7 +168,18 @@ async def account_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Round to 2 decimal places and store in user_data
     user_data['price'] = round(price, 2)
     
-    await update.message.reply_text(f'Great! The total price is ₹{user_data["price"]}. Please make the payment to UPI ID: your_upi_id@upi\n\nAfter payment, please upload a screenshot of the transaction.')
+    keyboard = [
+        [InlineKeyboardButton("Proofs", url=PROOFS_CHANNEL)],
+        [InlineKeyboardButton("Back", callback_data='back_to_account')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f'Great! The total price is ₹{user_data["price"]}. '
+        f'Please make the payment to UPI ID: your_upi_id@upi\n\n'
+        f'After payment, please upload a screenshot of the transaction.',
+        reply_markup=reply_markup
+    )
     return PAYMENT
 
 async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -150,17 +206,53 @@ async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await message.edit_reply_markup(reply_markup=reply_markup)
         
         # Here you would typically process the order through the LOLSMM API
-        await update.message.reply_text("Your request has been received and is being processed. I will notify you once it is completed.")
+        await update.message.reply_text("Your request has been received and is being processed. I will notify you once it is completed.", reply_markup=get_main_menu_keyboard())
         del user_sessions[update.effective_user.id]
-        return ConversationHandler.END
+        return MAIN_MENU
     else:
-        await update.message.reply_text("Please upload a screenshot of your payment.")
+        keyboard = [
+            [InlineKeyboardButton("Back", callback_data='back_to_payment')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Please upload a screenshot of your payment.", reply_markup=reply_markup)
+        return PAYMENT
+
+async def back_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle back button presses."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == 'back_to_quantity':
+        service = user_sessions[query.from_user.id]['service']
+        keyboard = [[InlineKeyboardButton("Back", callback_data='back_to_services')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f'You selected {service}. Please enter the quantity (50-20,000):', reply_markup=reply_markup)
+        return QUANTITY
+    elif query.data == 'back_to_account':
+        quantity = user_sessions[query.from_user.id]['quantity']
+        keyboard = [[InlineKeyboardButton("Back", callback_data='back_to_quantity')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f'You entered quantity: {quantity}. Now please enter the username, ID, or share the link of the account:', reply_markup=reply_markup)
+        return ACCOUNT
+    elif query.data == 'back_to_payment':
+        user_data = user_sessions[query.from_user.id]
+        keyboard = [
+            [InlineKeyboardButton("Proofs", url=PROOFS_CHANNEL)],
+            [InlineKeyboardButton("Back", callback_data='back_to_account')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            f'The total price is ₹{user_data["price"]}. '
+            f'Please make the payment to UPI ID: paytohemant@fam\n\n'
+            f'After payment, please upload a screenshot of the transaction.',
+            reply_markup=reply_markup
+        )
         return PAYMENT
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel the conversation."""
-    await update.message.reply_text('Order cancelled. Use /start to begin a new order.')
-    return ConversationHandler.END
+    await update.message.reply_text('Order cancelled. Use /start to begin a new order.', reply_markup=get_main_menu_keyboard())
+    return MAIN_MENU
 
 async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle admin actions on log messages."""
@@ -190,11 +282,15 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            PLATFORM: [CallbackQueryHandler(platform_callback, pattern='^platform_')],
-            SERVICE: [CallbackQueryHandler(service_callback, pattern='^service_')],
-            QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, quantity_handler)],
-            ACCOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, account_handler)],
-            PAYMENT: [MessageHandler(filters.PHOTO | filters.Document.ALL | filters.TEXT & ~filters.COMMAND, payment_handler)],
+            MAIN_MENU: [CallbackQueryHandler(main_menu_callback)],
+            PLATFORM: [CallbackQueryHandler(platform_callback)],
+            SERVICE: [CallbackQueryHandler(service_callback)],
+            QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, quantity_handler),
+                       CallbackQueryHandler(back_handler, pattern='^back_')],
+            ACCOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, account_handler),
+                      CallbackQueryHandler(back_handler, pattern='^back_')],
+            PAYMENT: [MessageHandler(filters.PHOTO | filters.Document.ALL | filters.TEXT & ~filters.COMMAND, payment_handler),
+                      CallbackQueryHandler(back_handler, pattern='^back_')],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
