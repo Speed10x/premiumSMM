@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
 import aiohttp
-import json
+from flask import Flask, request
 
 # Load environment variables
 load_dotenv()
@@ -19,25 +19,28 @@ LOLSMM_API_URL = os.getenv('LOLSMM_API_URL')
 LOLSMM_API_KEY = os.getenv('LOLSMM_API_KEY')
 LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
 
+# Flask app for webhook
+app = Flask(__name__)
+
 # Conversation states
-PLATFORM, SERVICE, QUANTITY, LINK, PAYMENT = range(5)
+PLATFORM, SERVICE, QUANTITY, ACCOUNT, PAYMENT = range(5)
 
 # Platform and service options
 PLATFORMS = {
-    'Instagram': ['Followers', 'Likes', 'Views', 'Comments'],
     'YouTube': ['Likes', 'Subscribers', 'Watch Time'],
-    'Twitter': ['Followers', 'Retweets', 'Likes'],
-    'Telegram': ['Group Members', 'Channel Subscribers']
+    'Instagram': ['Followers', 'Likes', 'Views', 'Comments'],
+    'Telegram': ['Group Members', 'Channel Subscribers'],
+    'Twitter': ['Followers', 'Retweets', 'Likes']
 }
 
 # User session storage
-user_data = {}
+user_sessions = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send a message when the command /start is issued."""
     keyboard = [[InlineKeyboardButton(platform, callback_data=f'platform_{platform}')] for platform in PLATFORMS.keys()]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Welcome to our SMM Bot! Please select a platform:', reply_markup=reply_markup)
+    await update.message.reply_text('Welcome! Please choose a platform:', reply_markup=reply_markup)
     return PLATFORM
 
 async def platform_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -45,8 +48,8 @@ async def platform_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     query = update.callback_query
     await query.answer()
     platform = query.data.split('_')[1]
-    user_data[query.from_user.id] = {'platform': platform}
-
+    user_sessions[query.from_user.id] = {'platform': platform}
+    
     keyboard = [[InlineKeyboardButton(service, callback_data=f'service_{service}')] for service in PLATFORMS[platform]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(f'You selected {platform}. Now choose a service:', reply_markup=reply_markup)
@@ -57,19 +60,18 @@ async def service_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     query = update.callback_query
     await query.answer()
     service = query.data.split('_')[1]
-    user_data[query.from_user.id]['service'] = service
-
+    user_sessions[query.from_user.id]['service'] = service
     await query.edit_message_text(f'You selected {service}. Please enter the quantity (50-20,000):')
     return QUANTITY
 
-async def quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def quantity_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle quantity input."""
     try:
         quantity = int(update.message.text)
         if 50 <= quantity <= 20000:
-            user_data[update.effective_user.id]['quantity'] = quantity
+            user_sessions[update.effective_user.id]['quantity'] = quantity
             await update.message.reply_text('Great! Now please enter the username, ID, or share the link of the account:')
-            return LINK
+            return ACCOUNT
         else:
             await update.message.reply_text('Please enter a quantity between 50 and 20,000.')
             return QUANTITY
@@ -77,48 +79,31 @@ async def quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text('Please enter a valid number.')
         return QUANTITY
 
-async def link_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle link input and show payment information."""
-    user_data[update.effective_user.id]['link'] = update.message.text
-    
+async def account_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle account input and show payment information."""
+    user_sessions[update.effective_user.id]['account'] = update.message.text
     # Here you would typically fetch the price from the LOLSMM API
-    # For demonstration, we'll use a placeholder price
-    price = 10  # Replace with actual API call to get price
-    
-    user_data[update.effective_user.id]['price'] = price
-    
+    price = 10  # Placeholder price
     await update.message.reply_text(f'Great! The total price is ${price}. Please make the payment to UPI ID: your_upi_id@upi\n\nAfter payment, please upload a screenshot of the transaction.')
     return PAYMENT
 
-async def payment_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle payment screenshot and process the order."""
-    user_id = update.effective_user.id
-    user_info = user_data[user_id]
-
     if update.message.document or update.message.photo:
-        # Log the order details
-        log_message = (f"New order:\n"
-                       f"User ID: {user_id}\n"
-                       f"Platform: {user_info['platform']}\n"
-                       f"Service: {user_info['service']}\n"
-                       f"Quantity: {user_info['quantity']}\n"
-                       f"Link: {user_info['link']}\n"
-                       f"Price: ${user_info['price']}")
+        user_data = user_sessions[update.effective_user.id]
         
+        # Log the order
+        log_message = f"New order:\nUser ID: {update.effective_user.id}\nPlatform: {user_data['platform']}\nService: {user_data['service']}\nQuantity: {user_data['quantity']}\nAccount: {user_data['account']}"
         await context.bot.send_message(chat_id=LOG_CHANNEL_ID, text=log_message)
         
-        # Send the payment screenshot to the log channel
         if update.message.document:
             await context.bot.send_document(chat_id=LOG_CHANNEL_ID, document=update.message.document.file_id, caption="Payment Screenshot")
         else:
             await context.bot.send_photo(chat_id=LOG_CHANNEL_ID, photo=update.message.photo[-1].file_id, caption="Payment Screenshot")
-
-        # Here you would typically process the order through the LOLSMM API
-        # For demonstration, we'll just send a confirmation message
-        await update.message.reply_text("Your request has been processed. I will notify you once it is completed.")
         
-        # Clear user data
-        del user_data[user_id]
+        # Here you would typically process the order through the LOLSMM API
+        await update.message.reply_text("Your request has been processed. I will notify you once it is completed.")
+        del user_sessions[update.effective_user.id]
         return ConversationHandler.END
     else:
         await update.message.reply_text("Please upload a screenshot of your payment.")
@@ -130,7 +115,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 def main() -> None:
-    """Run the bot."""
+    """Set up and run the bot."""
     application = Application.builder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -138,16 +123,29 @@ def main() -> None:
         states={
             PLATFORM: [CallbackQueryHandler(platform_callback, pattern='^platform_')],
             SERVICE: [CallbackQueryHandler(service_callback, pattern='^service_')],
-            QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, quantity_input)],
-            LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, link_input)],
-            PAYMENT: [MessageHandler(filters.PHOTO | filters.Document.ALL | filters.TEXT & ~filters.COMMAND, payment_confirmation)],
+            QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, quantity_handler)],
+            ACCOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, account_handler)],
+            PAYMENT: [MessageHandler(filters.PHOTO | filters.Document.ALL | filters.TEXT & ~filters.COMMAND, payment_handler)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
 
     application.add_handler(conv_handler)
 
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Set up webhook
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get('PORT', 5000)),
+        webhook_url=os.environ.get('WEBHOOK_URL')
+    )
+
+@app.route('/' + TOKEN, methods=['POST'])
+def webhook():
+    """Handle incoming updates via webhook."""
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.process_update(update)
+    return 'OK'
 
 if __name__ == '__main__':
     main()
+    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
