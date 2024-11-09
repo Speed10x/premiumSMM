@@ -1,15 +1,15 @@
 # SMM Telegram Bot
 
-This Telegram bot provides Social Media Marketing (SMM) services for Instagram, YouTube, Twitter, and Telegram using the LOLSMM API.
+This Telegram bot provides Social Media Marketing (SMM) services using the LOLSMM API. It allows users to order various services for YouTube, Instagram, Telegram, and Twitter.
 
 ## Features
 
-- Multi-platform support (Instagram, YouTube, Twitter, Telegram)
-- Various services for each platform (followers, likes, views, etc.)
+- Multi-platform support (YouTube, Instagram, Telegram, Twitter)
+- Various services for each platform (likes, followers, subscribers, etc.)
 - User-friendly conversation flow
-- Quantity selection (50-20,000)
 - Payment processing via UPI
-- Order logging in a private channel
+- Order logging in a private channel with admin approval system
+- Notification system for order status updates
 
 ## Setup
 
@@ -30,6 +30,7 @@ This Telegram bot provides Social Media Marketing (SMM) services for Instagram, 
    LOLSMM_API_URL=your_lolsmm_api_url_here
    LOLSMM_API_KEY=your_lolsmm_api_key_here
    LOG_CHANNEL_ID=your_log_channel_id_here
+   WEBHOOK_URL=https://your-app-name.onrender.com/your_bot_token
    ```
 
 4. Run the bot:
@@ -47,10 +48,11 @@ This Telegram bot provides Social Media Marketing (SMM) services for Instagram, 
    - Build Command: (leave empty)
    - Start Command: (leave empty)
 5. Add the environment variables:
-   - `TELEGRAM_BOT_TOKEN` with your bot token
-   - `LOLSMM_API_URL` with your LOLSMM API URL
-   - `LOLSMM_API_KEY` with your LOLSMM API key
-   - `LOG_CHANNEL_ID` with your log channel ID
+   - `TELEGRAM_BOT_TOKEN`
+   - `LOLSMM_API_URL`
+   - `LOLSMM_API_KEY`
+   - `LOG_CHANNEL_ID`
+   - `WEBHOOK_URL`
 6. Deploy the bot.
 
 ## Usage
@@ -61,14 +63,10 @@ This Telegram bot provides Social Media Marketing (SMM) services for Instagram, 
 4. Make the payment and upload a screenshot.
 5. Wait for confirmation of your order.
 
-## AI Integration
+## Admin Features
 
-To enhance this bot with AI capabilities, consider the following:
-
-1. Use natural language processing to understand user queries and guide them through the ordering process.
-2. Implement sentiment analysis to gauge user satisfaction and provide appropriate responses.
-3. Use machine learning to predict popular services and offer personalized recommendations.
-4. Implement an AI-powered chatbot for handling customer support queries.
+- Approve, reject, or mark orders as pending from the log channel.
+- Automated notifications sent to users based on order status.
 
 ## Contributing
 
