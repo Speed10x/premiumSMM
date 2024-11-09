@@ -36,24 +36,24 @@ PLATFORMS = {
 
 PRICE_CHART = {
     'Instagram': {
-        'Views': 0.005,  # 5 rupees per 1k
-        'Followers': 0.2,  # 200 rupees per 1k
-        'Likes': 0.01,  # 10 rupees per 1k
+        'Views': 5,  # 5 rupees per 1000
+        'Followers': 200,  # 200 rupees per 1000
+        'Likes': 10,  # 10 rupees per 1000
         'Comments': 10  # 10 rupees per comment
     },
     'YouTube': {
-        'Subscribers': 0.75,  # 750 rupees per 1k
-        'Views': 0.2,  # 200 rupees per 1k
-        'Watch Time': 1.1  # 1,100 rupees per 1000 hours
+        'Subscribers': 750,  # 750 rupees per 1000
+        'Views': 200,  # 200 rupees per 1000
+        'Watch Time': 1100  # 1,100 rupees per 1000 hours
     },
     'Telegram': {
-        'Group Members': 0.25,  # 250 rupees per 1k
-        'Channel Subscribers': 0.26  # 260 rupees per 1k
+        'Group Members': 250,  # 250 rupees per 1000
+        'Channel Subscribers': 260  # 260 rupees per 1000
     },
     'Twitter': {
-        'Followers': 2.3,  # 2,300 rupees per 1k
-        'Retweets': 0.9,  # 900 rupees per 1k
-        'Likes': 0.3  # 300 rupees per 1k
+        'Followers': 2300,  # 2,300 rupees per 1000
+        'Retweets': 900,  # 900 rupees per 1000
+        'Likes': 300  # 300 rupees per 1000
     }
 }
 
@@ -118,7 +118,7 @@ async def account_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif service == 'Watch Time':  # Special case for YouTube watch time
         price = PRICE_CHART[platform][service] * (quantity / 1000)  # Price per 1000 hours
     else:
-        price = PRICE_CHART[platform][service] * (quantity / 1000)  # Price per 1k for other services
+        price = PRICE_CHART[platform][service] * (quantity / 1000)  # Price per 1000 for other services
     
     # Round to 2 decimal places and store in user_data
     user_data['price'] = round(price, 2)
