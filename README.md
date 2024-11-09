@@ -1,67 +1,79 @@
- # SMM Telegram Bot
+# SMM Telegram Bot
 
-Yeh Telegram bot Social Media Marketing (SMM) services provide karta hai, jo ek SMM API ke saath integrate hai.
+This Telegram bot provides Social Media Marketing (SMM) services for Instagram, YouTube, Twitter, and Telegram using the LOLSMM API.
 
 ## Features
 
-- Service categories aur services browse karna
-- Service details dekhna
-- Orders place karna
-- Balance check karna
-- Support information provide karna
+- Multi-platform support (Instagram, YouTube, Twitter, Telegram)
+- Various services for each platform (followers, likes, views, etc.)
+- User-friendly conversation flow
+- Quantity selection (50-20,000)
+- Payment processing via UPI
+- Order logging in a private channel
 
 ## Setup
 
-1. Is repository ko clone karein:
+1. Clone this repository:
    ```
    git clone https://github.com/yourusername/smm-telegram-bot.git
    cd smm-telegram-bot
    ```
 
-2. Required packages install karein:
+2. Install the required packages:
    ```
    pip install -r requirements.txt
    ```
 
-3. Root directory mein ek `.env` file create karein aur usme yeh content dalein:
+3. Create a `.env` file in the root directory with the following content:
    ```
    TELEGRAM_BOT_TOKEN=your_bot_token_here
-   SMM_API_URL=your_smm_api_url_here
-   SMM_API_KEY=your_smm_api_key_here
+   LOLSMM_API_URL=your_lolsmm_api_url_here
+   LOLSMM_API_KEY=your_lolsmm_api_key_here
+   LOG_CHANNEL_ID=your_log_channel_id_here
    ```
 
-4. Bot ko run karein:
+4. Run the bot:
    ```
    python bot.py
    ```
 
-## Render par Deployment
+## Deployment on Render
 
-1. Is repository ko apne GitHub account par fork karein.
-2. Agar aapke paas Render account nahi hai, to [Render](https://render.com/) par sign up karein.
-3. Render mein, ek naya Web Service create karein aur use apne GitHub repository se connect karein.
-4. Web Service ko configure karein:
+1. Fork this repository to your GitHub account.
+2. Sign up for a [Render](https://render.com/) account if you haven't already.
+3. In Render, create a new Web Service and connect it to your GitHub repository.
+4. Configure the Web Service:
    - Environment: Docker
-   - Build Command: (khali chhodein)
-   - Start Command: (khali chhodein)
-5. Environment variables add karein:
-   - `TELEGRAM_BOT_TOKEN` apke bot token ke saath
-   - `SMM_API_URL` apke SMM API URL ke saath
-   - `SMM_API_KEY` apke SMM API key ke saath
-6. Bot ko deploy karein.
+   - Build Command: (leave empty)
+   - Start Command: (leave empty)
+5. Add the environment variables:
+   - `TELEGRAM_BOT_TOKEN` with your bot token
+   - `LOLSMM_API_URL` with your LOLSMM API URL
+   - `LOLSMM_API_KEY` with your LOLSMM API key
+   - `LOG_CHANNEL_ID` with your log channel ID
+6. Deploy the bot.
 
 ## Usage
 
-1. Telegram par apne bot se chat start karein.
-2. Shuru karne ke liye /start command ka use karein.
-3. Services browse karne, balance check karne, ya support information dekhne ke liye buttons ka use karein.
-4. Service order karne ke liye, /order command ka use karein is format mein:
-   /order <service_id> <quantity> <link>
+1. Start a chat with your bot on Telegram.
+2. Use the /start command to begin.
+3. Follow the prompts to select a platform, service, quantity, and provide account details.
+4. Make the payment and upload a screenshot.
+5. Wait for confirmation of your order.
+
+## AI Integration
+
+To enhance this bot with AI capabilities, consider the following:
+
+1. Use natural language processing to understand user queries and guide them through the ordering process.
+2. Implement sentiment analysis to gauge user satisfaction and provide appropriate responses.
+3. Use machine learning to predict popular services and offer personalized recommendations.
+4. Implement an AI-powered chatbot for handling customer support queries.
 
 ## Contributing
 
-Contributions ka swagat hai! Kripya Pull Request submit karne mein sankoch na karein.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-Is project ko MIT License ke tahat license kiya gaya hai.
+This project is licensed under the MIT License.
