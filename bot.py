@@ -18,6 +18,7 @@ TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 LOLSMM_API_URL = os.getenv('LOLSMM_API_URL')
 LOLSMM_API_KEY = os.getenv('LOLSMM_API_KEY')
 LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL')
 
 # Flask app for webhook
 app = Flask(__name__)
@@ -94,15 +95,24 @@ async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         # Log the order
         log_message = f"New order:\nUser ID: {update.effective_user.id}\nPlatform: {user_data['platform']}\nService: {user_data['service']}\nQuantity: {user_data['quantity']}\nAccount: {user_data['account']}"
-        await context.bot.send_message(chat_id=LOG_CHANNEL_ID, text=log_message)
+        message = await context.bot.send_message(chat_id=LOG_CHANNEL_ID, text=log_message)
         
         if update.message.document:
             await context.bot.send_document(chat_id=LOG_CHANNEL_ID, document=update.message.document.file_id, caption="Payment Screenshot")
         else:
             await context.bot.send_photo(chat_id=LOG_CHANNEL_ID, photo=update.message.photo[-1].file_id, caption="Payment Screenshot")
         
+        # Add buttons to the log message
+        keyboard = [
+            [InlineKeyboardButton("Approve", callback_data=f"approve_{update.effective_user.id}_{message.message_id}")],
+            [InlineKeyboardButton("Reject", callback_data=f"reject_{update.effective_user.id}_{message.message_id}")],
+            [InlineKeyboardButton("Pending", callback_data=f"pending_{update.effective_user.id}_{message.message_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await message.edit_reply_markup(reply_markup=reply_markup)
+        
         # Here you would typically process the order through the LOLSMM API
-        await update.message.reply_text("Your request has been processed. I will notify you once it is completed.")
+        await update.message.reply_text("Your request has been received and is being processed. I will notify you once it is completed.")
         del user_sessions[update.effective_user.id]
         return ConversationHandler.END
     else:
@@ -113,6 +123,27 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel the conversation."""
     await update.message.reply_text('Order cancelled. Use /start to begin a new order.')
     return ConversationHandler.END
+
+async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle admin actions on log messages."""
+    query = update.callback_query
+    await query.answer()
+    action, user_id, message_id = query.data.split('_')
+    user_id = int(user_id)
+    message_id = int(message_id)
+
+    if action == 'approve':
+        await context.bot.send_message(chat_id=user_id, text="Your service request has been completed!")
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.edit_message_text(text=f"{query.message.text}\n\nStatus: Approved")
+    elif action == 'reject':
+        await context.bot.send_message(chat_id=user_id, text="Your service request has been rejected due to an incorrect transaction screenshot. Please contact support for assistance.")
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.edit_message_text(text=f"{query.message.text}\n\nStatus: Rejected")
+    elif action == 'pending':
+        await context.bot.send_message(chat_id=user_id, text="Your service request is pending. We're experiencing some issues and will contact you directly. Thank you for your patience.")
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.edit_message_text(text=f"{query.message.text}\n\nStatus: Pending")
 
 def main() -> None:
     """Set up and run the bot."""
@@ -131,12 +162,13 @@ def main() -> None:
     )
 
     application.add_handler(conv_handler)
+    application.add_handler(CallbackQueryHandler(handle_admin_action, pattern='^(approve|reject|pending)_'))
 
     # Set up webhook
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get('PORT', 5000)),
-        webhook_url=os.environ.get('WEBHOOK_URL')
+        webhook_url=WEBHOOK_URL
     )
 
 @app.route('/' + TOKEN, methods=['POST'])
@@ -148,4 +180,3 @@ def webhook():
 
 if __name__ == '__main__':
     main()
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
