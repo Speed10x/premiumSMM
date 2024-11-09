@@ -136,7 +136,7 @@ def main() -> None:
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get('PORT', 5000)),
-        webhook_url=os.environ.get('WEBHOOK_URL')
+        webhook_url=os.environ.get('https://file-converter-bot-98ux.onrender.com')
     )
 
 @app.route('/' + TOKEN, methods=['POST'])
