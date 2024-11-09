@@ -34,6 +34,29 @@ PLATFORMS = {
     'Twitter': ['Followers', 'Retweets', 'Likes']
 }
 
+PRICE_CHART = {
+    'Instagram': {
+        'Views': 0.005,  # 5 rupees per 1k
+        'Followers': 0.2,  # 200 rupees per 1k
+        'Likes': 0.01,  # 10 rupees per 1k
+        'Comments': 10  # 10 rupees per comment
+    },
+    'YouTube': {
+        'Subscribers': 0.75,  # 750 rupees per 1k
+        'Views': 0.2,  # 200 rupees per 1k
+        'Watch Time': 1.1  # 1,100 rupees per 1000 hours
+    },
+    'Telegram': {
+        'Group Members': 0.25,  # 250 rupees per 1k
+        'Channel Subscribers': 0.26  # 260 rupees per 1k
+    },
+    'Twitter': {
+        'Followers': 2.3,  # 2,300 rupees per 1k
+        'Retweets': 0.9,  # 900 rupees per 1k
+        'Likes': 0.3  # 300 rupees per 1k
+    }
+}
+
 # User session storage
 user_sessions = {}
 
@@ -82,10 +105,25 @@ async def quantity_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def account_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle account input and show payment information."""
-    user_sessions[update.effective_user.id]['account'] = update.message.text
-    # Here you would typically fetch the price from the LOLSMM API
-    price = 10  # Placeholder price
-    await update.message.reply_text(f'Great! The total price is ${price}. Please make the payment to UPI ID: your_upi_id@upi\n\nAfter payment, please upload a screenshot of the transaction.')
+    user_data = user_sessions[update.effective_user.id]
+    user_data['account'] = update.message.text
+    
+    platform = user_data['platform']
+    service = user_data['service']
+    quantity = user_data['quantity']
+    
+    # Calculate price based on the price chart
+    if service == 'Comments':  # Special case for Instagram comments
+        price = PRICE_CHART[platform][service] * quantity
+    elif service == 'Watch Time':  # Special case for YouTube watch time
+        price = PRICE_CHART[platform][service] * (quantity / 1000)  # Price per 1000 hours
+    else:
+        price = PRICE_CHART[platform][service] * (quantity / 1000)  # Price per 1k for other services
+    
+    # Round to 2 decimal places and store in user_data
+    user_data['price'] = round(price, 2)
+    
+    await update.message.reply_text(f'Great! The total price is ₹{user_data["price"]}. Please make the payment to UPI ID: your_upi_id@upi\n\nAfter payment, please upload a screenshot of the transaction.')
     return PAYMENT
 
 async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -94,7 +132,7 @@ async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         user_data = user_sessions[update.effective_user.id]
         
         # Log the order
-        log_message = f"New order:\nUser ID: {update.effective_user.id}\nPlatform: {user_data['platform']}\nService: {user_data['service']}\nQuantity: {user_data['quantity']}\nAccount: {user_data['account']}"
+        log_message = f"New order:\nUser ID: {update.effective_user.id}\nPlatform: {user_data['platform']}\nService: {user_data['service']}\nQuantity: {user_data['quantity']}\nAccount: {user_data['account']}\nPrice: ₹{user_data['price']}"
         message = await context.bot.send_message(chat_id=LOG_CHANNEL_ID, text=log_message)
         
         if update.message.document:
