@@ -1,7 +1,7 @@
 import os
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
 import aiohttp
 import json
@@ -13,139 +13,139 @@ load_dotenv()
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Bot token and API details (stored in .env file)
+# Bot token and API details
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-SMM_API_URL = os.getenv('SMM_API_URL')
-SMM_API_KEY = os.getenv('SMM_API_KEY')
+LOLSMM_API_URL = os.getenv('LOLSMM_API_URL')
+LOLSMM_API_KEY = os.getenv('LOLSMM_API_KEY')
+LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
+
+# Conversation states
+PLATFORM, SERVICE, QUANTITY, LINK, PAYMENT = range(5)
+
+# Platform and service options
+PLATFORMS = {
+    'Instagram': ['Followers', 'Likes', 'Views', 'Comments'],
+    'YouTube': ['Likes', 'Subscribers', 'Watch Time'],
+    'Twitter': ['Followers', 'Retweets', 'Likes'],
+    'Telegram': ['Group Members', 'Channel Subscribers']
+}
 
 # User session storage
-user_sessions = {}
+user_data = {}
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send a message when the command /start is issued."""
-    keyboard = [
-        [InlineKeyboardButton("Services", callback_data='services')],
-        [InlineKeyboardButton("Balance", callback_data='balance')],
-        [InlineKeyboardButton("Support", callback_data='support')]
-    ]
+    keyboard = [[InlineKeyboardButton(platform, callback_data=f'platform_{platform}')] for platform in PLATFORMS.keys()]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Welcome to our SMM Bot! What would you like to do?', reply_markup=reply_markup)
+    await update.message.reply_text('Welcome to our SMM Bot! Please select a platform:', reply_markup=reply_markup)
+    return PLATFORM
 
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle button presses."""
+async def platform_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle platform selection."""
     query = update.callback_query
     await query.answer()
+    platform = query.data.split('_')[1]
+    user_data[query.from_user.id] = {'platform': platform}
 
-    if query.data == 'services':
-        await show_categories(update, context)
-    elif query.data == 'balance':
-        await show_balance(update, context)
-    elif query.data == 'support':
-        await show_support(update, context)
-    elif query.data.startswith('category_'):
-        category_id = query.data.split('_')[1]
-        await show_services(update, context, category_id)
-    elif query.data.startswith('service_'):
-        service_id = query.data.split('_')[1]
-        await show_service_details(update, context, service_id)
-
-async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show service categories."""
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{SMM_API_URL}/api/v2", json={
-            "key": SMM_API_KEY,
-            "action": "services"
-        }) as response:
-            data = await response.json()
-    
-    categories = set(service['category'] for service in data)
-    keyboard = [[InlineKeyboardButton(category, callback_data=f'category_{category}')] for category in categories]
+    keyboard = [[InlineKeyboardButton(service, callback_data=f'service_{service}')] for service in PLATFORMS[platform]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.edit_message_text('Choose a category:', reply_markup=reply_markup)
+    await query.edit_message_text(f'You selected {platform}. Now choose a service:', reply_markup=reply_markup)
+    return SERVICE
 
-async def show_services(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str) -> None:
-    """Show services for a specific category."""
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{SMM_API_URL}/api/v2", json={
-            "key": SMM_API_KEY,
-            "action": "services"
-        }) as response:
-            data = await response.json()
-    
-    services = [service for service in data if service['category'] == category]
-    keyboard = [[InlineKeyboardButton(service['name'], callback_data=f'service_{service["service"]}')] for service in services]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.edit_message_text(f'Services in {category}:', reply_markup=reply_markup)
+async def service_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle service selection."""
+    query = update.callback_query
+    await query.answer()
+    service = query.data.split('_')[1]
+    user_data[query.from_user.id]['service'] = service
 
-async def show_service_details(update: Update, context: ContextTypes.DEFAULT_TYPE, service_id: str) -> None:
-    """Show details for a specific service."""
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{SMM_API_URL}/api/v2", json={
-            "key": SMM_API_KEY,
-            "action": "services"
-        }) as response:
-            data = await response.json()
-    
-    service = next((s for s in data if s['service'] == service_id), None)
-    if service:
-        message = f"Service: {service['name']}\n"
-        message += f"Price: ${service['rate']} per 1000\n"
-        message += f"Min order: {service['min']}\n"
-        message += f"Max order: {service['max']}\n"
-        message += f"\nTo order, use the /order command with the following format:\n"
-        message += f"/order {service_id} <quantity> <link>"
-        await update.callback_query.edit_message_text(message)
-    else:
-        await update.callback_query.edit_message_text("Service not found.")
+    await query.edit_message_text(f'You selected {service}. Please enter the quantity (50-20,000):')
+    return QUANTITY
 
-async def show_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show user balance."""
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{SMM_API_URL}/api/v2", json={
-            "key": SMM_API_KEY,
-            "action": "balance"
-        }) as response:
-            data = await response.json()
-    
-    balance = data.get('balance', 'N/A')
-    currency = data.get('currency', 'USD')
-    await update.callback_query.edit_message_text(f"Your current balance is: {balance} {currency}")
-
-async def show_support(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show support information."""
-    support_message = "For support, please contact us at support@example.com or visit our website www.example.com"
-    await update.callback_query.edit_message_text(support_message)
-
-async def handle_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle order command."""
+async def quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle quantity input."""
     try:
-        _, service_id, quantity, link = update.message.text.split(' ', 3)
-        quantity = int(quantity)
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{SMM_API_URL}/api/v2", json={
-                "key": SMM_API_KEY,
-                "action": "add",
-                "service": service_id,
-                "link": link,
-                "quantity": quantity
-            }) as response:
-                data = await response.json()
-        
-        if 'order' in data:
-            await update.message.reply_text(f"Order placed successfully. Order ID: {data['order']}")
+        quantity = int(update.message.text)
+        if 50 <= quantity <= 20000:
+            user_data[update.effective_user.id]['quantity'] = quantity
+            await update.message.reply_text('Great! Now please enter the username, ID, or share the link of the account:')
+            return LINK
         else:
-            await update.message.reply_text(f"Error placing order: {data.get('error', 'Unknown error')}")
+            await update.message.reply_text('Please enter a quantity between 50 and 20,000.')
+            return QUANTITY
     except ValueError:
-        await update.message.reply_text("Invalid order format. Please use: /order <service_id> <quantity> <link>")
+        await update.message.reply_text('Please enter a valid number.')
+        return QUANTITY
+
+async def link_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle link input and show payment information."""
+    user_data[update.effective_user.id]['link'] = update.message.text
+    
+    # Here you would typically fetch the price from the LOLSMM API
+    # For demonstration, we'll use a placeholder price
+    price = 10  # Replace with actual API call to get price
+    
+    user_data[update.effective_user.id]['price'] = price
+    
+    await update.message.reply_text(f'Great! The total price is ${price}. Please make the payment to UPI ID: your_upi_id@upi\n\nAfter payment, please upload a screenshot of the transaction.')
+    return PAYMENT
+
+async def payment_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle payment screenshot and process the order."""
+    user_id = update.effective_user.id
+    user_info = user_data[user_id]
+
+    if update.message.document or update.message.photo:
+        # Log the order details
+        log_message = (f"New order:\n"
+                       f"User ID: {user_id}\n"
+                       f"Platform: {user_info['platform']}\n"
+                       f"Service: {user_info['service']}\n"
+                       f"Quantity: {user_info['quantity']}\n"
+                       f"Link: {user_info['link']}\n"
+                       f"Price: ${user_info['price']}")
+        
+        await context.bot.send_message(chat_id=LOG_CHANNEL_ID, text=log_message)
+        
+        # Send the payment screenshot to the log channel
+        if update.message.document:
+            await context.bot.send_document(chat_id=LOG_CHANNEL_ID, document=update.message.document.file_id, caption="Payment Screenshot")
+        else:
+            await context.bot.send_photo(chat_id=LOG_CHANNEL_ID, photo=update.message.photo[-1].file_id, caption="Payment Screenshot")
+
+        # Here you would typically process the order through the LOLSMM API
+        # For demonstration, we'll just send a confirmation message
+        await update.message.reply_text("Your request has been processed. I will notify you once it is completed.")
+        
+        # Clear user data
+        del user_data[user_id]
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("Please upload a screenshot of your payment.")
+        return PAYMENT
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel the conversation."""
+    await update.message.reply_text('Order cancelled. Use /start to begin a new order.')
+    return ConversationHandler.END
 
 def main() -> None:
     """Run the bot."""
     application = Application.builder().token(TOKEN).build()
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_callback))
-    application.add_handler(CommandHandler("order", handle_order))
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            PLATFORM: [CallbackQueryHandler(platform_callback, pattern='^platform_')],
+            SERVICE: [CallbackQueryHandler(service_callback, pattern='^service_')],
+            QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, quantity_input)],
+            LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, link_input)],
+            PAYMENT: [MessageHandler(filters.PHOTO | filters.Document.ALL | filters.TEXT & ~filters.COMMAND, payment_confirmation)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
+    application.add_handler(conv_handler)
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
